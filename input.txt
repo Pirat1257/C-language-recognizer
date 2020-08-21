@@ -1,0 +1,74 @@
+#define TWO(a, b) ONE + ONE
+#define LONG_STRING "This is a very long\
+string that is used as an example."
+#include "C\\file.txt"
+#include <stdio.h>
+
+void main()()
+{
+    int a = (struct letter)a + ((int)c->z * &d / q), z  = 12;
+    const int aa, b = 2;
+    static const int aaa = 15;
+    static int aaaa, b;
+    int func_1()
+    {
+        const char q = 12;
+        struct asdf _struct;
+    }
+    return();
+}
+
+int func_4()
+{
+    some_func(a, b);
+    some_func();
+    if(a == b)
+        printf("%s", LONG_STRING);
+    else if (func_3() == 1)
+    {
+        printf("%s", LONG_STRING);
+        func_1(func_3(), 2);
+
+        int i = 0;
+        while(i < 2)
+        {
+            i++;
+        }
+
+        for(int i = 0; i < 12; i++)
+        {
+            printf("%s %d", LONG_STRING, a);
+        }
+    }
+}
+
+int a[][];
+
+struct lol {
+    int *q[] = 1;
+};
+
+struct asdf {
+    int zxc[];
+    int s : 12;
+    char q;
+    float w : 2;
+    double a[];
+};
+
+enum { one, two } lol = one;
+
+
+int b[2][5] = 1;
+
+void func_3(char *c, int i)
+{
+    extern int some_func()
+    {
+        return 1;
+    }
+    printf("%s", LONG_STRING);
+    char* restrict lol = q;
+
+    struct asdf *lol = wqe(); 
+}
