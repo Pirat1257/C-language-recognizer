@@ -9,9 +9,6 @@ char *_STRING_buf = 0;
 char *_CHARACTER_buf = 0;
 _Bool _CODE_active = 1;
 
-// Подсчет ковычек чтобы отследить где используется extern
-
-
 /*----------------Добавление_символа_в__STRING_buf----------------*/
 char *add_sym(char *s, char c)
 {
@@ -29,7 +26,7 @@ char *add_sym(char *s, char c)
 }
 %}
 
-%START _STRING _CHARACTER _DIRECTIVES _CODE
+%START _STRING _CHARACTER _DIRECTIVES _CODE _COMMENTS_1 _COMMENTS_2
 
 %%
     if(_CODE_active == 1)
@@ -79,6 +76,30 @@ char *add_sym(char *s, char c)
 }
 <_STRING>. {
     _STRING_buf = add_sym(_STRING_buf, *yytext);
+}
+
+<_CODE>\/\/ {
+    BEGIN _COMMENTS_1;
+}
+
+<_COMMENTS_1>\\\r*\n* ;
+
+<_COMMENTS_1>. ;
+
+<_COMMENTS_1>\r*\n* {
+    BEGIN _CODE;
+}
+
+<_CODE>\/\* {
+    BEGIN _COMMENTS_2;
+}
+
+<_COMMENTS_2>\r*\n* ;
+
+<_COMMENTS_2>. ;
+
+<_COMMENTS_2>\*\/ {
+    BEGIN _CODE;
 }
 
 <_CODE>\#|\%\: {
@@ -317,7 +338,7 @@ char *add_sym(char *s, char c)
     return(DIGIT);
 }
 
-<_CODE>[\\n\\r" "] {
+<_CODE>[\n\r" "] {
     
 }
 %%
