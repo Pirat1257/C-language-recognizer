@@ -2,31 +2,25 @@
 #include <stdio.h>
 #include <string.h>
 #include "y.tab.h"
-int lex_line = 1;
-int count = 0;
 
 char *_STRING_buf = 0;
 char *_CHARACTER_buf = 0;
 _Bool _CODE_active = 1;
+_Bool td = 0;
 
-/*----------------Добавление_символа_в__STRING_buf----------------*/
-char *add_sym(char *s, char c)
+int line = 1;
+int saved_line = 0;
+
+/*----------------------Для передачи идентификатора и номера его строки----------------------*/
+struct line_and_str
 {
-    if (strlen(s) == 0)
-    {
-        s[0] = c;
-        return(s);
-    }
-    else
-    {
-        s = realloc(s, (strlen(s) + 1) * sizeof(char));
-        s[strlen(s)] = c;
-        return(s);
-    }
-}
+	int line;
+    char *str;
+};
+
 %}
 
-%START _STRING _CHARACTER _DIRECTIVES _CODE _COMMENTS_1 _COMMENTS_2
+%START _STRING _CHARACTER _DIRECTIVES _CODE _COMMENTS_1 _COMMENTS_2 _DIGIT
 
 %%
     if(_CODE_active == 1)
@@ -35,58 +29,76 @@ char *add_sym(char *s, char c)
         BEGIN _CODE;
     }
 
-<_CODE>[\"\'] {
-    _STRING_buf = (char*)malloc(sizeof(char));
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
+<_CODE>\" {
+    saved_line = line;
     BEGIN _STRING;
 }
 
-<_STRING>\\n {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
+<_CODE>\L\" {
+    saved_line = line;
+    BEGIN _STRING;
 }
-<_STRING>\\r {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
-}
-<_STRING>\\t {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
-}
-<_STRING>\\ {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
-}
-<_STRING>\\\" {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
-}
-<_STRING>\\\' {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
-}
+
+<_STRING>\\n ;
+<_STRING>\\r ;
+<_STRING>\\t ;
+<_STRING>\\ ;
+<_STRING>\\\" ;
+<_STRING>\\\' ;
+<_STRING>\\\\ ;
 <_STRING>\n {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
+    line++;
 }
-<_STRING>[\"\'] {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
+<_STRING>\" {
     BEGIN _CODE;
-    char *dummy = (char*)realloc('\0', sizeof(char) * strlen(_STRING_buf));
-    for (int i = 0; i < strlen(_STRING_buf); i++)
-        dummy[i] = _STRING_buf[i];
-    free(_STRING_buf);
-    yylval.str = dummy;
-    if (!strcmp("\"", yytext))
-        return(STRING);
-    else return(CHARACTER);
+    yylval.line = saved_line;
+    return(STRING);
 }
-<_STRING>. {
-    _STRING_buf = add_sym(_STRING_buf, *yytext);
+<_STRING>. ;
+
+<_CODE>\' {
+    saved_line = line;
+    BEGIN _CHARACTER;
 }
+
+<_CODE>\L\' {
+    saved_line = line;
+    BEGIN _CHARACTER;
+}
+
+<_CHARACTER>\\n ;
+<_CHARACTER>\\r ;
+<_CHARACTER>\\t ;
+<_CHARACTER>\\ ;
+<_CHARACTER>\\\" ;
+<_CHARACTER>\\\' ;
+<_CHARACTER>\\\\ ;
+<_CHARACTER>\n {
+    line++;
+}
+<_CHARACTER>\' {
+    BEGIN _CODE;
+    yylval.line = saved_line;
+    return(CHARACTER);
+}
+<_CHARACTER>. ;
 
 <_CODE>\/\/ {
     BEGIN _COMMENTS_1;
 }
 
-<_COMMENTS_1>\\\r*\n* ;
+<_COMMENTS_1>\\\r*\n* {
+    for(int i = 0; i < strlen(yytext); i++)
+        if(yytext[i] == 10)
+            line++;
+}
 
 <_COMMENTS_1>. ;
 
 <_COMMENTS_1>\r*\n* {
+    for(int i = 0; i < strlen(yytext); i++)
+        if(yytext[i] == 10)
+            line++;
     BEGIN _CODE;
 }
 
@@ -94,7 +106,11 @@ char *add_sym(char *s, char c)
     BEGIN _COMMENTS_2;
 }
 
-<_COMMENTS_2>\r*\n* ;
+<_COMMENTS_2>\r*\n* {
+    for(int i = 0; i < strlen(yytext); i++)
+        if(yytext[i] == 10)
+            line++;
+}
 
 <_COMMENTS_2>. ;
 
@@ -108,63 +124,83 @@ char *add_sym(char *s, char c)
 
 <_DIRECTIVES>"define"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_DEFINE);
 }
 <_DIRECTIVES>"undef"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_UNDEF);
 }
 <_DIRECTIVES>"error"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_ERROR);
 }
 <_DIRECTIVES>"warning"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_WARNING);
 }
 <_DIRECTIVES>"include"/[\"\<" "] {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_INCLUDE);
 }
 <_DIRECTIVES>"if"/" " {
-    BEGIN _CODE;
-    return (P_IF);
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    yylval.line = line;
+    //return (P_IF);
 }
 <_DIRECTIVES>"ifdef"/" " {
-    BEGIN _CODE;
-    return (P_IFDEF);
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    yylval.line = line;
+    //return (P_IFDEF);
 }
 <_DIRECTIVES>"ifndef"/" " {
-    BEGIN _CODE;
-    return (P_IFNDEF);
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    yylval.line = line;
+    //return (P_IFNDEF);
 }
-<_DIRECTIVES>"else"/[" "\\r\\n] {
-    BEGIN _CODE;
-    return (P_ELSE);
+<_DIRECTIVES>"else"/[" "\r\n] {
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    //yylval.line = line;
+    //return (P_ELSE);
 }
 <_DIRECTIVES>"elif"/" " {
-    BEGIN _CODE;
-    return (P_ELIF);
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    //yylval.line = line;
+    //return (P_ELIF);
 }
-<_DIRECTIVES>"endif"/[\\r\\n] {
-    BEGIN _CODE;
-    return (P_ENDIF);
+<_DIRECTIVES>"endif"/[\r\n" "] {
+    //BEGIN _CODE;
+    BEGIN _COMMENTS_1;
+    //yylval.line = line;
+    //return (P_ENDIF);
 }
 <_DIRECTIVES>"line"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_LINE);
 }
 <_DIRECTIVES>"pragma"/" " {
     BEGIN _CODE;
+    yylval.line = line;
     return (P_PRAGMA);
 }
-<_DIRECTIVES>[" "\\n\\r] {
+<_DIRECTIVES>[" "\n\r] {
     BEGIN _CODE;
-    return (P_NULL_DIRECTIVE);
+    //yylval.line = line;
+    //return (P_NULL_DIRECTIVE);
 }
 <_DIRECTIVES>. {
     BEGIN _CODE;
-    printf("ERROR _DIRECTIVES\n");
+    printf("Line: %d. ERROR _DIRECTIVES\n", line);
 }
 
 <_CODE>\.|\-\>|\+\+|\-\-|\<\<|\>\>|\!\=|\<\=|\>\=|\=\=|\&\&|\|\||\*\=|\/\=|\%\=|\+\=|\-\=|\<\<\=|\>\>\=|\&\=|\^\=|\|\=|\<\:|\:\>|\<\%|\%\> {
@@ -181,9 +217,15 @@ char *add_sym(char *s, char c)
     else if (!strcmp("!=", yytext))
         return(NOT_EQ);
     else if (!strcmp("++", yytext))
+    {
+        yylval.line = line;
         return(INC);
+    }
     else if (!strcmp("--", yytext))
+    {
+        yylval.line = line;
         return(DEC);
+    }
     else if (!strcmp(">=", yytext))
         return(GREATER_OR_EQ);
     else if (!strcmp("<=", yytext))
@@ -209,7 +251,10 @@ char *add_sym(char *s, char c)
     else if (!strcmp("%=", yytext))
         return(MOD);
     else if (!strcmp("->", yytext))
+    {
+        yylval.line = line;
         return(ARROW);
+    }
     
     return(*yytext);
 }
@@ -233,76 +278,188 @@ char *add_sym(char *s, char c)
     return(*yytext);
 }
 
+<_CODE>[0-9][a-zA-Z][0-9a-fA-F]* {
+    yylval.line = line;
+    return(DIGIT); 
+}
+
 <_CODE>[\_a-zA-Z][\_a-zA-Z0-9]* {
     /*----------------Keywords----------------*/
     if (!strcmp("auto", yytext))
         return(AUTO);
     else if (!strcmp("break", yytext))
+    {
+        yylval.line = line;
         return(BREAK);
+    }
     else if (!strcmp("case", yytext))
+    {
+        yylval.line = line;
         return(CASE);
+    }
     else if (!strcmp("char", yytext))
+    {
+        yylval.line = line;
         return(CHAR);
+    }
     else if (!strcmp("const", yytext))
+    {
+        yylval.line = line;
         return(CONST);
+    }
     else if (!strcmp("continue", yytext))
+    {
+        yylval.line = line;
         return(CONTINUE);
+    }
     else if (!strcmp("default", yytext))
+    {
+        yylval.line = line;
         return(DEFAULT);
+    }
     else if (!strcmp("do", yytext))
+    {
+        yylval.line = line;
         return(DO);
+    }
     else if (!strcmp("double", yytext))
+    {
+        yylval.line = line;
         return(DOUBLE);
+    }
     else if (!strcmp("else", yytext))
+    {
+        yylval.line = line;
         return(ELSE);
+    }
     else if (!strcmp("enum", yytext))
+    {
+        yylval.line = line;
         return(ENUM);
+    }
     else if (!strcmp("extern", yytext))
+    {
+        yylval.line = line;
         return(EXTERN);
+    }
     else if (!strcmp("float", yytext))
+    {
+        yylval.line = line;
         return(FLOAT);
+    }
     else if (!strcmp("for", yytext))
+    {
+        yylval.line = line;
         return(FOR);
+    }
     else if (!strcmp("goto", yytext))
+    {
+        yylval.line = line;
         return(GOTO);
+    }
     else if (!strcmp("if", yytext))
+    {
+        yylval.line = line;
         return(IF);
+    }
     else if (!strcmp("int", yytext))
+    {
+        yylval.line = line;
         return(INT);
+    }
     else if (!strcmp("long", yytext))
+    {
+        yylval.line = line;
         return(LONG);
+    }
     else if (!strcmp("register", yytext))
+    {
+        yylval.line = line;
         return(REGISTER);
+    }
     else if (!strcmp("return", yytext))
+    {
+        yylval.line = line;
         return(RETURN);
+    }
     else if (!strcmp("restrict", yytext))
         return(RESTRICT);
     else if (!strcmp("short", yytext))
+    {
+        yylval.line = line;
         return(SHORT);
+    }
     else if (!strcmp("signed", yytext))
+    {
+        yylval.line = line;
         return(SIGNED);
+    }
     else if (!strcmp("sizeof", yytext))
+    {
+        yylval.line = line;
         return(SIZEOF);
+    }
+    else if (!strcmp("size_t", yytext))
+    {
+        yylval.line = line;
+        return(SIZE_T);
+    }
     else if (!strcmp("static", yytext))
+    {
+        yylval.line = line;
         return(STATIC);
+    }
     else if (!strcmp("struct", yytext))
+    {
+        yylval.line = line;
         return(STRUCT);
+    }
     else if (!strcmp("switch", yytext))
+    {
+        yylval.line = line;
         return(SWITCH);
+    }
     else if (!strcmp("typedef", yytext))
-        return(TYPEDEF);
+    {
+        yylval.line = line;
+        td = 1;
+        //return(TYPEDEF);
+    }
     else if (!strcmp("union", yytext))
+    {
+        yylval.line = line;
         return(UNION);
+    }
     else if (!strcmp("unsigned", yytext))
+    {
+        yylval.line = line;
         return(UNSIGNED);
+    }
     else if (!strcmp("void", yytext))
+    {
+        yylval.line = line;
         return(VOID);
+    }
     else if (!strcmp("volatile", yytext))
+    {
+        yylval.line = line;
         return(VOLATILE);
+    }
     else if (!strcmp("while", yytext))
+    {
+        yylval.line = line;
         return(WHILE);
-    else if (!strcmp("_Bool", yytext))
+    }
+    else if (!strcmp("bool", yytext))
+    {
+        yylval.line = line;
         return(_BOOL);
+    }
+    else if (!strcmp("_Bool", yytext))
+    {
+        yylval.line = line;
+        return(_BOOL);
+    }
     /*----------------Operator_or_punctuator----------------*/
     else if (!strcmp("and", yytext))
         return(AND);
@@ -327,18 +484,26 @@ char *add_sym(char *s, char c)
     else if (!strcmp("xor_eq", yytext))
         return(XOR_EQ);
     /*----------------Identifier----------------*/
-    char *c = (char*)malloc(sizeof(char) * strlen(yytext));
-    for (int i = 0; i < strlen(yytext); i++)
-        c[i] = yytext[i];
-    yylval.str = c;
-    return(IDENTIFIER);
+    if (td == 0) {
+        yylval.las = (struct line_and_str*)malloc(sizeof(struct line_and_str));
+        yylval.las->str = (char*)malloc(sizeof(char) * strlen(yytext) + 1);
+        int i;
+        for (i = 0; i < strlen(yytext); i++) 
+            yylval.las->str[i] = yytext[i];
+        yylval.las->str[i] = '\0';
+        yylval.las->line = line;
+        return(IDENTIFIER);
+    }
+    else td = 0;
 }
 
-<_CODE>[0-9]+ {
+<_CODE>[0-9][a-fA-F0-9]* {
+    yylval.line = line;
     return(DIGIT);
 }
 
-<_CODE>[\n\r" "] {
-    
+<_CODE>[\n\r" "\t] {
+    if (yytext[0] == 10)
+        line++;
 }
 %%
